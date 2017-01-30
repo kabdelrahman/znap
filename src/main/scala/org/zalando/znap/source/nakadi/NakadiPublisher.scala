@@ -13,6 +13,7 @@ import akka.stream.scaladsl.{Framing, Source}
 import akka.stream.{ActorMaterializerSettings, _}
 import akka.util.ByteString
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import org.apache.commons.lang.StringUtils
 import org.slf4j.LoggerFactory
 import org.zalando.znap.PartitionId
 import org.zalando.znap.config.{Config, NakadiSource}
@@ -87,10 +88,11 @@ class NakadiPublisher(nakadiSource: NakadiSource,
     * @param partition partition to be consumed from `storedOffset`
     */
   private def checkStoredOffset(storedOffset: String, partition: Partition): Unit = {
-    val storedOffsetL = storedOffset.toLong
-    val oldestAvailableOffsetL = partition.oldestAvailableOffset.toLong
-    val newestAvailableOffsetL = partition.newestAvailableOffset.toLong
-    if (storedOffsetL < oldestAvailableOffsetL || storedOffsetL > newestAvailableOffsetL) {
+    val storedOffsetExt = StringUtils.leftPad(storedOffset, 18, "0")
+    val oldestAvailableOffsetExt = StringUtils.leftPad(partition.oldestAvailableOffset, 18, "0")
+    val newestAvailableOffsetExt = StringUtils.leftPad(partition.newestAvailableOffset, 18, "0")
+
+    if (storedOffsetExt < oldestAvailableOffsetExt || storedOffsetExt > newestAvailableOffsetExt) {
       val message = "Available offsets: " +
         s"${partition.oldestAvailableOffset}-${partition.newestAvailableOffset}, " +
         s"stored offset: $storedOffset"
