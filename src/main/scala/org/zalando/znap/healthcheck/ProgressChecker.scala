@@ -10,6 +10,7 @@ package org.zalando.znap.healthcheck
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
+import org.apache.commons.lang.StringUtils
 import org.slf4j.LoggerFactory
 import org.zalando.znap.config._
 import org.zalando.znap.metrics.Instrumented
@@ -17,7 +18,7 @@ import org.zalando.znap.persistence.dynamo.DynamoDBOffsetReader
 import org.zalando.znap.source.nakadi.{NakadiPartitionGetter, NakadiTokens}
 import org.zalando.znap.utils.{NoUnexpectedMessages, ThrowableUtils}
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 
@@ -66,9 +67,9 @@ object ProgressChecker {
     private val awaitDuration = 30.seconds
     private val progressBarSize = 50
 
-    @volatile private var lastValuesPerPartition_OldestAvailableOffset = Map.empty[String, Long]
-    @volatile private var lastValuesPerPartition_NewestAvailableOffset = Map.empty[String, Long]
-    @volatile private var lastValuesPerPartition_CurrentOffset = Map.empty[String, Long]
+    @volatile private var lastValuesPerPartition_OldestAvailableOffset = Map.empty[String, String]
+    @volatile private var lastValuesPerPartition_NewestAvailableOffset = Map.empty[String, String]
+    @volatile private var lastValuesPerPartition_CurrentOffset = Map.empty[String, String]
 
     private val getPartitionsFunc = pipeline.source match {
       case nakadiSource: NakadiSource =>
@@ -96,25 +97,30 @@ object ProgressChecker {
       try {
         val partitionsF = getPartitionsFunc()
         val offsetsF = getOffsetFunc()
-        val partitions = Await.result(partitionsF, 30.seconds)
-        val offsets = Await.result(offsetsF, 30.seconds)
+        val partitions = Await.result(partitionsF, awaitDuration)
+        val offsets = Await.result(offsetsF, awaitDuration)
 
         partitions.sortBy(_.partition).foreach { partition =>
-          val start = partition.oldestAvailableOffset.toLong
-          val end = partition.newestAvailableOffset.toLong
+          val start = partition.oldestAvailableOffset
+          val end = partition.newestAvailableOffset
 
-          lastValuesPerPartition_OldestAvailableOffset += partition.partition -> start
-          lastValuesPerPartition_NewestAvailableOffset += partition.partition -> end
+          lastValuesPerPartition_OldestAvailableOffset += partition.partition -> partition.oldestAvailableOffset
+          lastValuesPerPartition_NewestAvailableOffset += partition.partition -> partition.newestAvailableOffset
 
           offsets.get(partition.partition) match {
             case Some(offset) =>
-              val offsetNum = offset.toLong
+              lastValuesPerPartition_CurrentOffset += partition.partition -> offset
 
-              lastValuesPerPartition_CurrentOffset += partition.partition -> offsetNum
+              val offsetExt = StringUtils.leftPad(offset, 18, "0")
+              val startExt = StringUtils.leftPad(start, 18, "0")
+              val endExt = StringUtils.leftPad(end, 18, "0")
 
-              if (offsetNum >= start && offsetNum <= end) {
-                val length = end - start
-                val progress = offsetNum - start
+              if (offsetExt >= startExt && offsetExt <= endExt) {
+                val lengthF = getDistanceBetweenOffsets(start, end)
+                val progressF = getDistanceBetweenOffsets(start, offset)
+                val length = Await.result(lengthF, awaitDuration)
+                val progress = Await.result(progressF, awaitDuration)
+
                 val positionRaw = ((progressBarSize * progress.toDouble) / length).toInt
                 val position =
                   if (positionRaw < 0) {
@@ -129,10 +135,10 @@ object ProgressChecker {
                   "." * position +
                   "*" +
                   ("." * (progressBarSize - position - 1)) +
-                  s"] $start - $offsetNum - $end"
+                  s"] $start - $offset - $end"
                 logger.info(msg)
               } else {
-                logger.error(s"In ${pipeline.id} ${partition.partition}, the current offset is $offsetNum, available offsets are $start - $end.")
+                logger.error(s"In ${pipeline.id} ${partition.partition}, the current offset is $offset, available offsets are $start - $end.")
               }
             case _ =>
               val msg = s"${pipeline.id} ${partition.partition} [..................................................] $start - __ - $end"
@@ -147,14 +153,20 @@ object ProgressChecker {
 
     Await.result(getPartitionsFunc(), awaitDuration).sortBy(_.partition).foreach { p =>
       metrics.gauge(s"oldestAvailableOffset-${pipeline.id}-${p.partition}") {
-        lastValuesPerPartition_OldestAvailableOffset.getOrElse(p.partition, -1)
+        lastValuesPerPartition_OldestAvailableOffset.getOrElse(p.partition, "None")
       }
       metrics.gauge(s"newestAvailableOffset-${pipeline.id}-${p.partition}") {
-        lastValuesPerPartition_NewestAvailableOffset.getOrElse(p.partition, -1)
+        lastValuesPerPartition_NewestAvailableOffset.getOrElse(p.partition, "None")
       }
       metrics.gauge(s"currentOffset-${pipeline.id}-${p.partition}") {
-        lastValuesPerPartition_CurrentOffset.getOrElse(p.partition, -1)
+        lastValuesPerPartition_CurrentOffset.getOrElse(p.partition, "None")
       }
+    }
+
+    // Prepared for future changes in Nakadi, when there will be
+    // a special endpoint for measuing the distance between two offsets.
+    private def getDistanceBetweenOffsets(offset1: String, offset2: String): Future[Long] = {
+      Future.successful(offset2.toLong - offset1.toLong)
     }
   }
 }
