@@ -184,11 +184,7 @@ class NakadiPublisher(nakadiSource: NakadiSource,
       // Coalesce chunks into a line.
       .via(Framing.delimiter(ByteString("\n"), Int.MaxValue))
 
-      .map { bs =>
-        val eventBatch = Json.read[EventBatch](bs.utf8String)
-        logger.info(s"Got batch ${eventBatch.cursor}")
-        eventBatch
-      }
+      .map(bs => Json.read[EventBatch](bs.utf8String))
   }
 
   private def processPreconditionFailedResponse(partition: String, offset: String, response: HttpResponse): Source[Nothing, Any] = {
