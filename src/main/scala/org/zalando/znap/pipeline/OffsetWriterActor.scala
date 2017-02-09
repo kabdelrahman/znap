@@ -51,6 +51,12 @@ private class PeriodicOffsetWriterActor(override protected val snapshotPipeline:
 
   override def receive: Receive = {
     case ActorSubscriberMessage.OnNext(cursor: Cursor) =>
+      // Detect non-monotonic offsets
+      if (lastCursor.nonEmpty) {
+        if (lastCursor.get.offset > cursor.offset) {
+          log.error(s"Last cursor: ${lastCursor.get}, received cursor $cursor. New offset is smaller.")
+        }
+      }
       lastCursor = Some(cursor)
 
     case ActorSubscriberMessage.OnComplete =>
