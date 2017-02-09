@@ -36,6 +36,10 @@ class PipelineManager(tokens: NakadiTokens) extends Actor with NoUnexpectedMessa
     Config.Supervision.Pipelines.MaxFailures,
     Config.Supervision.Pipelines.Period
   )
+  private val piplineFinishTracker = new TimePeriodEventTracker(
+    Config.Supervision.Pipelines.MaxFailures,
+    Config.Supervision.Pipelines.Period
+  )
 
   override def preStart(): Unit = {
     Config.Pipelines.foreach { snapshotPipeline =>
@@ -61,23 +65,30 @@ class PipelineManager(tokens: NakadiTokens) extends Actor with NoUnexpectedMessa
   }
 
   override def receive: Receive = {
-    case p @ PipelineFinished(pipelineId, partitionId) =>
-//      log.error(s"Pipeline finishing is not expected, shutting down.")
-      log.error(s"Pipeline finishing is not expected, restarting.")
+    case PipelineFinished(pipelineId, partitionId) =>
+      val tooManyFinishes = piplineFinishTracker.registerEvent(ZonedDateTime.now())
 
-      val pipeline = pipelines(pipelineId + partitionId)
-      assertRunning(pipeline)
-      runningPipelines -= pipeline
+      if (tooManyFinishes) {
+        log.error(s"Pipeline finishing is not expected, shutting down.")
+        val errorMessage = s"Too many pipeline finishes in last ${errorTracker.period}."
+        log.error(errorMessage)
 
-//      killSwitches.foreach { case (_, killSwitch) =>
-//        killSwitch.shutdown()
-//      }
-//      throw new Exception("Pipeline finishing is not expected.")
+        killSwitches.foreach { case (_, killSwitch) =>
+          killSwitch.shutdown()
+        }
 
-      startPipeline(pipelineId, partitionId)
+        throw new Exception(errorMessage)
+      } else {
+        log.error(s"Pipeline finishing is not expected, restarting.")
 
+        val pipeline = pipelines(pipelineId + partitionId)
+        assertRunning(pipeline)
+        runningPipelines -= pipeline
 
-    case p @ PipelineFailed(pipelineId, partitionId, cause) =>
+        startPipeline(pipelineId, partitionId)
+      }
+
+    case PipelineFailed(pipelineId, partitionId, cause) =>
       val tooManyErrors = errorTracker.registerEvent(ZonedDateTime.now())
 
       if (tooManyErrors) {
