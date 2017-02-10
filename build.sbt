@@ -49,3 +49,7 @@ libraryDependencies ++= {
     "org.scalatest" %% "scalatest" % "3.0.0" % "test"
   )
 }
+
+// health checks
+resolvers += Resolver.bintrayRepo("lhotari","releases")
+libraryDependencies += "io.github.lhotari" %% "akka-http-health" % "1.0.2"

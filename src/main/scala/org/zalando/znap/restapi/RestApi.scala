@@ -10,6 +10,7 @@ import akka.http.scaladsl.model.headers.{Connection, HttpEncodings, `Accept-Enco
 import akka.stream.ActorMaterializer
 import akka.util.ByteString
 import com.fasterxml.jackson.core.JsonProcessingException
+import io.github.lhotari.akka.http.health.HealthEndpoint.defaultHealthChecker.completeHealthCheck
 import org.zalando.znap._
 import org.zalando.znap.config.{Config, SnapshotTarget}
 import org.zalando.znap.dumps.DumpManager
@@ -124,7 +125,7 @@ class RestApi(actorRoot: ActorRef, actorSystem: ActorSystem) {
       path("health" / "ping") {
         get {
           discardRequestBody {
-            complete("ok")
+            completeHealthCheck
           }
         }
       }
