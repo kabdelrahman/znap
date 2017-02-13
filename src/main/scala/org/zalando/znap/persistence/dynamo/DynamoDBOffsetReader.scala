@@ -27,7 +27,7 @@ class DynamoDBOffsetReader(dynamoDBOffsetPersistence: DynamoDBOffsetPersistence,
 
   override def getLastOffsets: Future[Map[String, String]] = Future {
     val offsetsTable = dynamoDB.getTable(dynamoDBOffsetPersistence.tableName)
-    val items = offsetsTable.scan(new ScanSpec())
+    val items = offsetsTable.scan(new ScanSpec().withConsistentRead(true))
     val offsetMap = items.asScala.map { item =>
       val partition = item.getString(Config.DynamoDB.KVTables.Attributes.Key)
       val offset = item.getString(Config.DynamoDB.KVTables.Attributes.Value)
