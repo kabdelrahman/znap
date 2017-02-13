@@ -17,7 +17,7 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-stream" % akkaVersion,
 //    "com.typesafe.akka" %% "akka-http-core" % akkaVersion,
 //    "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
-    "com.typesafe.akka" %% "akka-http" % "10.0.1",
+    "com.typesafe.akka" %% "akka-http" % "10.0.3",
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
 
     "ch.qos.logback" % "logback-classic" % "1.1.7",
@@ -49,3 +49,7 @@ libraryDependencies ++= {
     "org.scalatest" %% "scalatest" % "3.0.0" % "test"
   )
 }
+
+// health checks
+resolvers += Resolver.bintrayRepo("lhotari","releases")
+libraryDependencies += "io.github.lhotari" %% "akka-http-health" % "1.0.2"
