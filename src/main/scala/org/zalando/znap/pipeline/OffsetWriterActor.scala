@@ -54,7 +54,7 @@ private class PeriodicOffsetWriterActor(override protected val snapshotPipeline:
       // Detect non-monotonic offsets
       if (lastCursor.nonEmpty) {
         if (lastCursor.get.offset > cursor.offset) {
-          log.error(s"Last cursor: ${lastCursor.get}, received cursor $cursor. New offset is smaller.")
+          log.error(s"For pipeline ${snapshotPipeline.id}, last cursor: ${lastCursor.get}, received cursor $cursor. New offset is smaller.")
         }
       }
       lastCursor = Some(cursor)
@@ -69,6 +69,7 @@ private class PeriodicOffsetWriterActor(override protected val snapshotPipeline:
 
     case Tick =>
       if (lastCursor.nonEmpty) {
+        log.info(s"For pipeline ${snapshotPipeline.id}, persisting ${lastCursor.get}.")
         write(lastCursor.get)
       }
   }
