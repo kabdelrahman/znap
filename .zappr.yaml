@@ -1,0 +1,23 @@
+commit:
+  message:
+    patterns:
+      - '^#[0-9]+'
+      - '^[A-Z]+-[0-9]+ .+'
+approvals:
+  minimum: 1
+  ignore: pr_opener
+  pattern: "^(:\\+1:|👍|lgtm|shipit)$"
+  veto:
+    pattern: "^(:\\-1:|👎)$"
+  from: # has to be either one of the following
+    orgs:
+      - ie
+      - cutie
+    collaborators: true
+specification:
+  minimum-length:
+    enabled: true
+    length: 4
+  body:
+    contains-url: false
+    contains-issue-number: true
